@@ -3,7 +3,7 @@
 **Contribution Number:** 1 
 **Student:** Linh Nguyen
 **Issue:** [\[GitHub issue link\]](https://github.com/graphql-hive/console/issues/2730)  
-**Status:** Phase I
+**Status:** Phase II
 
 ---
 

@@ -90,7 +90,7 @@ Using UMPIRE framework (adapted):
 3. Run any existing CI or test scripts to verify nothing breaks after the change.
 4. Submit a PR with all changes, grouped logically by directory if there are many files.
 
-**Implement:** [Link to your branch/commits as you work]
+**Implement:** [ fix/bash-strict-mode-565](https://github.com/LinhNguyen2901/sorbet/tree/fix/bash-strict-mode-565)
 
 **Review:** Run existing tests and linting; confirm CI passes.
 
@@ -119,15 +119,20 @@ Using UMPIRE framework (adapted):
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Week 1 Progress
 
-[What you built this week, challenges faced, decisions made]
+- Audited all 310 `.sh` files in the repo: 70 already had full strict mode, 35 had partial, 205 had none.
+- Wrote a Python script to batch-process all 240 files needing changes.
+- Scripts with partial mode (e.g. `set -eo pipefail`) were upgraded in-place, preserving flags like `-x` (→ `set -euxo pipefail`).
+- Scripts with no mode had `set -euo pipefail` inserted after the shebang line.
 
 ### Code Changes
 
-- **Files modified:** [List of .sh files updated]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:** 185 `.sh` files total
+- **Key commits:**
+  - [`36a9021`](https://github.com/LinhNguyen2901/sorbet/commit/36a9021a7) — Apply bash strict mode to CI and tooling scripts (15 files: `.buildkite/`, `tools/`, `vscode_extension/`)
+  - [`31018c6`](https://github.com/LinhNguyen2901/sorbet/commit/31018c65d) — Apply bash strict mode to test scripts (170 files under `test/`)
+- **Approach decisions:** Partial-mode scripts were fixed in-place rather than inserting a duplicate `set` line, to avoid two competing `set` calls in the same script.
 
 ---
 

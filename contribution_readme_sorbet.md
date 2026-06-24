@@ -3,7 +3,7 @@
 **Contribution Number:** 1 
 **Student:** Linh Nguyen
 **Issue:** [#565 – Audit bash scripts to use "unofficial bash strict mode" in more places](https://github.com/sorbet/sorbet/issues/565)  
-**Status:** Phase I
+**Status:** Phase III
 
 ---
 
@@ -97,71 +97,3 @@ Using UMPIRE framework (adapted):
 **Evaluate:** Verify via `grep -rL "set -euo pipefail" --include="*.sh" .` that no scripts remain without it.
 
 ---
-
-## Testing Strategy
-
-### Unit Tests
-
-- [ ] Confirm updated scripts still execute correctly end-to-end
-- [ ] Confirm a script with a deliberate error now exits non-zero (validates `-e` is working)
-
-### Integration Tests
-
-- [ ] All existing CI checks pass after adding strict mode to each script
-
-### Manual Testing
-
-- Ran `grep -rL "set -euo pipefail" --include="*.sh" .` before and after changes to confirm the list went from [X] scripts to zero (or near zero for any intentionally excluded scripts).
-- Manually executed several of the updated scripts (e.g., build helpers and test runners) to confirm they still behave correctly with strict mode enabled.
-- Introduced a deliberate unbound variable in one test script and confirmed it now exits non-zero with an error, validating that `-u` is active.
-
----
-
-## Implementation Notes
-
-### Week [X] Progress
-
-[What you built this week, challenges faced, decisions made]
-
-### Code Changes
-
-- **Files modified:** [List of .sh files updated]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
-
----
-
-## Pull Request
-
-**PR Link:** [GitHub PR URL when submitted]
-
-**PR Description:** [Draft or final PR description]
-
-**Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
-
-**Status:** [Awaiting review / Iterating / Approved / Merged]
-
----
-
-## Learnings & Reflections
-
-### Technical Skills Gained
-
-[What you learned technically]
-
-### Challenges Overcome
-
-[What was hard and how you solved it]
-
-### What I'd Do Differently Next Time
-
-[Reflection on your process]
-
----
-
-## Resources Used
-
-- [The "Unofficial Bash Strict Mode" – redsymbol.net](http://redsymbol.net/articles/unofficial-bash-strict-mode/)
-- [sorbet/sorbet Issue #565](https://github.com/sorbet/sorbet/issues/565)

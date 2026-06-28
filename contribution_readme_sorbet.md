@@ -3,7 +3,7 @@
 **Contribution Number:** 1 
 **Student:** Linh Nguyen
 **Issue:** [#565 – Audit bash scripts to use "unofficial bash strict mode" in more places](https://github.com/sorbet/sorbet/issues/565)  
-**Status:** Phase III
+**Status:** Phase IV
 
 ---
 
@@ -60,9 +60,9 @@ The main challenge was the initial Bazel build taking a long time on first run s
 
 ### Reproduction Evidence
 
-- **Branch:** [your branch link]
+- **Branch:** [fix/bash-strict-mode-565](https://github.com/LinhNguyen2901/sorbet/tree/fix/bash-strict-mode-565)
 - **Screenshots/logs:** N/A — the issue is confirmed by running the grep command above and seeing many scripts without the strict mode header.
-- **My findings:** Running `grep -rL "set -euo pipefail" --include="*.sh" .` from the repo root returned [X] scripts. The violations are spread across multiple directories including `build_tools/`, `test/`, and various CI helper scripts. A smaller number of scripts already had the directive (typically the newer or more critical ones). None of the scripts used `IFS` changes, so no extra care was needed there — only the `set -euo pipefail` line needed to be added.
+- **My findings:** Running `grep -rL "set -euo pipefail" --include="*.sh" .` from the repo root returned 240 scripts needing updates (205 missing strict mode entirely, 35 with partial mode). Out of 310 total `.sh` files, 70 already had full `set -euo pipefail`. The violations are spread across `.buildkite/`, `tools/`, `test/`, and `vscode_extension/`. None of the scripts used `IFS` changes, so no extra care was needed there — only the `set -euo pipefail` line needed to be added or upgraded.
 
 ---
 
@@ -86,11 +86,11 @@ Using UMPIRE framework (adapted):
 
 **Plan:**
 1. Run `grep -rL "set -euo pipefail" --include="*.sh" .` to enumerate all scripts that need updating.
-2. For each script, add `set -euo pipefail` immediately after the shebang line.
+2. For each script, add `set -euo pipefail` immediately after the shebang line. For scripts with partial strict mode (e.g. `set -e`, `set -eu`, `set -eo pipefail`), replace the existing `set` line in-place to preserve position and any extra flags like `-x`.
 3. Run any existing CI or test scripts to verify nothing breaks after the change.
-4. Submit a PR with all changes, grouped logically by directory if there are many files.
+4. Submit a PR with all changes, grouped logically by directory.
 
-**Implement:** [ fix/bash-strict-mode-565](https://github.com/LinhNguyen2901/sorbet/tree/fix/bash-strict-mode-565)
+**Implement:** [fix/bash-strict-mode-565](https://github.com/LinhNguyen2901/sorbet/tree/fix/bash-strict-mode-565)
 
 **Review:** Run existing tests and linting; confirm CI passes.
 
@@ -111,15 +111,15 @@ Using UMPIRE framework (adapted):
 
 ### Manual Testing
 
-- Ran `grep -rL "set -euo pipefail" --include="*.sh" .` before and after changes to confirm the list went from [X] scripts to zero (or near zero for any intentionally excluded scripts).
-- Manually executed several of the updated scripts (e.g., build helpers and test runners) to confirm they still behave correctly with strict mode enabled.
-- Introduced a deliberate unbound variable in one test script and confirmed it now exits non-zero with an error, validating that `-u` is active.
+- Ran `grep -rL "set -euo pipefail" --include="*.sh" .` before changes: returned 205 scripts with no strict mode and 35 with partial mode (240 total needing updates).
+- After changes: all 240 scripts updated. Scripts with `-x` preserved as `set -euxo pipefail` rather than dropping the flag.
+- **Not yet manually executed** — scripts have not been run locally. CI on the PR is the intended verification step.
 
 ---
 
 ## Implementation Notes
 
-### Week 1 Progress
+### Progress
 
 - Audited all 310 `.sh` files in the repo: 70 already had full strict mode, 35 had partial, 205 had none.
 - Wrote a Python script to batch-process all 240 files needing changes.
@@ -138,15 +138,20 @@ Using UMPIRE framework (adapted):
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** [sorbet/sorbet#10410](https://github.com/sorbet/sorbet/pull/10410)
 
-**PR Description:** [Draft or final PR description]
+**PR Description:**
+Audited all 310 `.sh` files in the repo and applied `set -euo pipefail` to the 240 scripts that were missing it or only had partial strict mode (e.g. `set -e`, `set -eu`, `set -eo pipefail`). Scripts with `-x` were upgraded to `set -euxo pipefail` to preserve that flag. The change is purely additive — no script logic was altered.
+
+**Summary of Contribution:**
+- Identified 240 bash scripts across `.buildkite/`, `tools/`, `test/`, and `vscode_extension/` that lacked full strict mode.
+- Upgraded 35 partial-mode scripts in-place and added strict mode to 205 scripts that had none.
+- Split into two commits: one for CI/tooling scripts (15 files) and one for test scripts (170 files).
 
 **Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
+- Awaiting first review.
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting Review
 
 ---
 
@@ -154,15 +159,19 @@ Using UMPIRE framework (adapted):
 
 ### Technical Skills Gained
 
-[What you learned technically]
+- Learned how bash strict mode flags (`-e`, `-u`, `-o pipefail`) interact and why each matters independently.
+- Practiced auditing a large codebase systematically using `grep` and scripting (Python) to apply batch changes safely.
+- Understood the open source contribution workflow: fork → branch → PR against upstream.
 
 ### Challenges Overcome
 
-[What was hard and how you solved it]
+- 240 files needed updating — doing this manually would be error-prone. Wrote a Python script to handle both the "add after shebang" case and the "upgrade partial set command in-place" case, while preserving flags like `-x`.
+- Partial-mode scripts had their `set` command at varying line positions (not always line 2), so the script had to detect and replace the existing line rather than blindly inserting after the shebang.
 
 ### What I'd Do Differently Next Time
 
-[Reflection on your process]
+- Run CI locally (or at least test a representative sample of scripts) before submitting, to catch any test scripts that break when `grep` returns no matches under `-e`.
+- Open the PR slightly earlier to get maintainer feedback on approach before doing all 240 files.
 
 ---
 

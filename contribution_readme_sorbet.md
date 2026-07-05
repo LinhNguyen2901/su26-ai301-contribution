@@ -3,7 +3,7 @@
 **Contribution Number:** 1 
 **Student:** Linh Nguyen
 **Issue:** [#565 – Audit bash scripts to use "unofficial bash strict mode" in more places](https://github.com/sorbet/sorbet/issues/565)  
-**Status:** Phase IV
+**Status:** Phase 4 - Awaiting Re-Review
 
 ---
 
@@ -119,20 +119,27 @@ Using UMPIRE framework (adapted):
 
 ## Implementation Notes
 
-### Progress
+### Week 1 Progress
 
+**Codebase audit and initial implementation:**
 - Audited all 310 `.sh` files in the repo: 70 already had full strict mode, 35 had partial, 205 had none.
-- Wrote a Python script to batch-process all 240 files needing changes.
-- Scripts with partial mode (e.g. `set -eo pipefail`) were upgraded in-place, preserving flags like `-x` (→ `set -euxo pipefail`).
-- Scripts with no mode had `set -euo pipefail` inserted after the shebang line.
+- Wrote a Python script to batch-process all 240 files needing changes, handling two distinct cases: inserting `set -euo pipefail` after the shebang for scripts with none, and replacing partial `set` lines in-place for scripts that had e.g. `set -e` or `set -eo pipefail`, preserving extra flags like `-x`.
+- Opened [PR #10410](https://github.com/sorbet/sorbet/pull/10410) to the upstream sorbet repo.
+
+**Maintainer review and iteration:**
+- Received feedback from a collaborator (neilparikh) that several test scripts were failing in CI.
+- Investigated the root cause: many `test/cli/` scripts pipe `main/sorbet` through `grep` or `sed`. Since sorbet exits non-zero when it finds type errors, adding `-o pipefail` caused these pipes to fail mid-script, producing truncated output that didn't match expected test snapshots.
+- Reverted all 170 test script changes to restore CI, keeping the 15 non-test changes (`.buildkite/`, `tools/`, `vscode_extension/`) which passed all linting checks.
+- Pushed the fix to the same PR and left a comment explaining the failure cause and what was changed.
 
 ### Code Changes
 
-- **Files modified:** 185 `.sh` files total
+- **Files modified (final):** 15 `.sh` files in `.buildkite/`, `tools/scripts/`, and `vscode_extension/scripts/`
 - **Key commits:**
-  - [`36a9021`](https://github.com/LinhNguyen2901/sorbet/commit/36a9021a7) — Apply bash strict mode to CI and tooling scripts (15 files: `.buildkite/`, `tools/`, `vscode_extension/`)
-  - [`31018c6`](https://github.com/LinhNguyen2901/sorbet/commit/31018c65d) — Apply bash strict mode to test scripts (170 files under `test/`)
-- **Approach decisions:** Partial-mode scripts were fixed in-place rather than inserting a duplicate `set` line, to avoid two competing `set` calls in the same script.
+  - [`36a9021`](https://github.com/LinhNguyen2901/sorbet/commit/36a9021a7) — Apply bash strict mode to CI and tooling scripts
+  - [`31018c6`](https://github.com/LinhNguyen2901/sorbet/commit/31018c65d) — Apply bash strict mode to test scripts *(reverted after CI failures)*
+  - [`83acf3e`](https://github.com/LinhNguyen2901/sorbet/commit/83acf3ef0) — Revert strict mode changes to test scripts to fix CI failures
+- **Approach decisions:** Partial-mode scripts were fixed in-place rather than inserting a duplicate `set` line, to avoid two competing `set` calls in the same script. Test scripts were ultimately excluded because sorbet's non-zero exit on type errors conflicts with `pipefail` in pipe chains.
 
 ---
 
@@ -149,9 +156,9 @@ Audited all 310 `.sh` files in the repo and applied `set -euo pipefail` to the 2
 - Split into two commits: one for CI/tooling scripts (15 files) and one for test scripts (170 files).
 
 **Maintainer Feedback:**
-- Awaiting first review.
+- neilparikh (collaborator) flagged CI test failures and suggested reverting the failing files while keeping the rest. Change was addressed promptly — test scripts reverted, CI restored, explanation left on the PR.
 
-**Status:** Awaiting Review
+**Status:** Awaiting Re-review
 
 ---
 

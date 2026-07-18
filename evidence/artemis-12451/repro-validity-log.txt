@@ -1,0 +1,31 @@
+Issue #12451 — Programming Exercise: Bonus Points: 1e-30 is considered a valid value
+Reproduction log — captured 2026-07-18
+
+Source of the reproduced markup:
+  src/main/webapp/app/programming/manage/update/update-components/grading/programming-exercise-grading.component.html
+  - Points field:      lines 21-31  (id="field_points",      type="number", min=1, max=9999)
+  - Bonus Points field: lines 42-52 (id="field_bonusPoints",  type="number", min=0, max=9999)
+
+Method:
+  A standalone HTML page reconstructing the exact <input type="number" min=... max="9999">
+  markup from the file above was loaded in a browser. Each field's native `validity` API
+  was read after entering a scientific-notation value — this is the same DOM API Angular's
+  ngModel / MinValidator / MaxValidator consult, so it directly demonstrates what Angular
+  itself would see.
+
+Inputs used:
+  points field:      "1e2"    (parses to 100,     in-range for min=1 / max=9999)
+  bonusPoints field:  "1e-30"  (parses to 1e-30,   in-range for min=0 / max=9999)
+
+--- Run 1 (initial load) ---
+points: raw value="1e2"  parsed valueAsNumber=100  validity.valid=true  (rangeUnderflow=false, rangeOverflow=false, badInput=false)
+bonusPoints: raw value="1e-30"  parsed valueAsNumber=1e-30  validity.valid=true  (rangeUnderflow=false, rangeOverflow=false, badInput=false)
+
+--- Run 2 (fresh page reload, repeated to confirm determinism) ---
+points: raw value="1e2"  parsed valueAsNumber=100  validity.valid=true  (rangeUnderflow=false, rangeOverflow=false, badInput=false)
+bonusPoints: raw value="1e-30"  parsed valueAsNumber=1e-30  validity.valid=true  (rangeUnderflow=false, rangeOverflow=false, badInput=false)
+
+Conclusion:
+  Both runs report validity.valid=true with no rangeUnderflow/rangeOverflow/badInput flags
+  for scientific-notation input, on BOTH the points and bonusPoints fields — confirming the
+  bug is deterministic and is not specific to Bonus Points; Points has the identical gap.

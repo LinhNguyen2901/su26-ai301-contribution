@@ -3,7 +3,7 @@
 **Contribution Number:** 2
 **Student:** Linh Nguyen
 **Issue:** https://github.com/ls1intum/Artemis/issues/12451
-**Status:** Phase III Complete
+**Status:** Phase IV Complete
 
 ---
 
@@ -116,11 +116,14 @@ Using UMPIRE framework (adapted):
 - [x] Server: `Exercise.validateScoreSettings()` rejects `maxPoints = 1e-30`
 - [x] Server: rejects `bonusPoints = 1e-30`
 - [x] Server: accepts normal-precision points (`100.5`, `0.25`) as a regression guard
+- [x] Server: rejects `maxPoints`/`bonusPoints` of `NaN`/`Infinity` without crashing (added in review response)
+- [x] Server: `StrictDecimalDeserializer` rejects `1e-3`, `1e-30`, and `1e2` at the JSON level, and accepts plain decimals/integers/negatives/`null` (7 tests, added in review response — this is the test that proves the exact gap a reviewer found is now closed)
 
 ### Integration Tests
 
 - [x] Ran the existing Vitest suites for all 4 touched components (`programming-exercise-grading`, `text-exercise-update`, `modeling-exercise-update`, `file-upload-exercise-update`) — 92 pre-existing tests, all still passing, confirming the new directive doesn't break existing form behavior
-- [x] Ran `ExerciseTest.java` via `./gradlew test --tests ExerciseTest -x webapp` (Testcontainers/PostgreSQL) — 16/16 tests passing (13 pre-existing + 3 new)
+- [x] Ran `ExerciseTest.java` via `./gradlew test --tests ExerciseTest -x webapp` (Testcontainers/PostgreSQL) — 19/19 tests passing (13 pre-existing + 6 new, including the review-response NaN/Infinity tests)
+- [x] Ran `TextExerciseIntegrationTest.java` (Testcontainers/PostgreSQL) — 107/107 tests passing, confirming the new `@JsonDeserialize` annotation on `UpdateTextExerciseDTO` doesn't break real create/update/import REST request parsing (added in review response, since that DTO's field annotation was the riskiest of the 5 places touched)
 
 ### Manual Testing
 
@@ -154,8 +157,25 @@ The local toolchain (Node, Docker, JDK) only came together gradually during this
 - Writing the automated regression test for this surfaced a subtlety worth noting briefly: simulating a real keystroke (raw DOM value + dispatched `input` event) only works if it happens *after* Angular's first `detectChanges()` — otherwise `NgModel` hasn't wired up its `ControlValueAccessor` yet, and the simulated input silently goes nowhere. Took some iteration to isolate.
 
 **Commits this week:**
-- `ec9a7557bf`: Reject scientific notation in points/bonus points fields
-- `4752b42617`: Reject points with too many decimal places on the server too
+- `44d3d8d4`: Reject scientific notation in points/bonus points fields
+- `b95a1cec`: Reject points with too many decimal places on the server too
+
+### Week 9 Progress (PR submission and review response)
+
+**What I did:**
+- Rebased the branch onto the latest upstream `develop` (150 commits ahead) before opening the PR, per `CONTRIBUTING.md`. Resolved real merge conflicts in the File Upload and Text exercise templates/components, where upstream had restructured the grading section layout in the meantime — re-applied the `noScientificNotation` wiring on top of the new structure.
+- The rebase also surfaced a real upstream convention change: `develop` now initializes the Angular TestBed once globally instead of per-spec, so my new Vitest spec's leftover `setupTestBed()` call started conflicting with it (`NG0400`). Fixed by removing it to match the new convention (confirmed by checking how an existing, already-migrated spec in the same folder had been updated).
+- Opened the PR against `ls1intum/Artemis:develop` (PR #13382), using the project's actual `.github/PULL_REQUEST_TEMPLATE.md` structure, with before/after evidence and a filled-in acceptance checklist.
+- CodeRabbit (automated review) left 2 actionable comments; both were valid, not false positives (see Maintainer Feedback below). Addressed both with 2 additional commits.
+
+**Challenges faced:**
+- The most valuable challenge this week was a genuine gap in my own server-side fix that I hadn't stress-tested: I'd verified the precision check against the issue's own example (`1e-30`) and assumed that covered "scientific notation," but a reviewer showed `1e-3` (a much less extreme case) sails straight through, because `1e-3` and `0.001` are bit-identical once parsed into a `Double` — no check on the *parsed value* can ever tell them apart. The real fix has to look at the raw JSON text before it becomes a `Double`, which meant learning how to write a custom Jackson `JsonDeserializer` and where exactly it needed to be attached (the entity for create endpoints, but 4 separate DTOs for update endpoints, since Artemis binds those differently per exercise type).
+- Verifying the new deserializer was safe took real regression testing, not just unit tests for the new class: I ran a full integration test class (`TextExerciseIntegrationTest`, 107 tests covering the real create/update/import REST flows) to confirm the new `@JsonDeserialize` annotation didn't break normal request parsing for legitimate values.
+
+**Commits this week:**
+- `2f38ff66`: Fix new spec after rebase onto develop's global TestBed init
+- `c25539a6`: Reject non-finite points values before precision check
+- `d5f3ae03`: Reject scientific notation at the JSON level, not just after parsing
 
 ### Code Changes
 
@@ -168,24 +188,36 @@ The local toolchain (Node, Docker, JDK) only came together gradually during this
   - `src/main/webapp/app/fileupload/manage/update/file-upload-exercise-update.component.{html,ts}`
   - `src/main/java/de/tum/cit/aet/artemis/exercise/domain/Exercise.java`
   - `src/test/java/de/tum/cit/aet/artemis/exercise/ExerciseTest.java`
-- **Key commits:**
-  - [`ec9a7557bf`](https://github.com/LinhNguyen2901/Artemis/commit/ec9a7557bf9b6fddd1dcdf41b246b4c06bc44614) — client-side directive + wiring into the 4 exercise forms
-  - [`4752b42617`](https://github.com/LinhNguyen2901/Artemis/commit/4752b42617c911bf60e7dfb62d70eafb1492151f) — server-side decimal-precision check
-- **Approach decisions:** Chose a shared validator directive (reading the raw DOM value) over migrating to PrimeNG's `p-inputnumber` — the "Match" option identified in the Phase II plan. The directive is a smaller, more targeted change that fixes the exact reported defect without a UI/styling migration risk across 4 separate forms; the PrimeNG migration remains a valid follow-up but felt like scope creep for this specific bug fix. For the server-side fix, chose a decimal-precision check (max 4 places) rather than trying to reject scientific-notation *syntax* directly, since by the time a JSON payload is deserialized into a `Double`, the original string format is already gone — precision is the only signal that survives to the server.
+  - `src/main/java/de/tum/cit/aet/artemis/core/util/StrictDecimalDeserializer.java` (new, added in review response)
+  - `src/test/java/de/tum/cit/aet/artemis/core/util/StrictDecimalDeserializerTest.java` (new, added in review response)
+  - `src/main/java/de/tum/cit/aet/artemis/exercise/domain/BaseExercise.java` (added in review response)
+  - `src/main/java/de/tum/cit/aet/artemis/programming/dto/UpdateProgrammingExerciseDTO.java` (added in review response)
+  - `src/main/java/de/tum/cit/aet/artemis/text/dto/UpdateTextExerciseDTO.java` (added in review response)
+  - `src/main/java/de/tum/cit/aet/artemis/modeling/dto/UpdateModelingExerciseDTO.java` (added in review response)
+  - `src/main/java/de/tum/cit/aet/artemis/fileupload/dto/UpdateFileUploadExerciseDTO.java` (added in review response)
+- **Key commits** (hashes changed after rebasing onto upstream `develop` before opening the PR — see PR section below for the branch link):
+  - [`44d3d8d4`](https://github.com/LinhNguyen2901/Artemis/commit/44d3d8d466) — client-side directive + wiring into the 4 exercise forms
+  - [`b95a1cec`](https://github.com/LinhNguyen2901/Artemis/commit/b95a1cec26) — server-side decimal-precision check
+  - [`2f38ff66`](https://github.com/LinhNguyen2901/Artemis/commit/2f38ff6628) — fixed my new Vitest spec after the rebase (upstream had changed how the Angular TestBed is initialized for the whole test suite in the meantime)
+  - [`c25539a6`](https://github.com/LinhNguyen2901/Artemis/commit/c25539a6bc) — reject non-finite (`NaN`/`Infinity`) points values before the precision check (review feedback)
+  - [`d5f3ae03`](https://github.com/LinhNguyen2901/Artemis/commit/d5f3ae03fa) — reject scientific notation at the JSON-parsing level, not just after conversion to `Double` (review feedback, see Maintainer Feedback below)
+- **Approach decisions:** Chose a shared validator directive (reading the raw DOM value) over migrating to PrimeNG's `p-inputnumber` — the "Match" option identified in the Phase II plan. The directive is a smaller, more targeted change that fixes the exact reported defect without a UI/styling migration risk across 4 separate forms; the PrimeNG migration remains a valid follow-up but felt like scope creep for this specific bug fix. For the server-side fix, my first attempt was a decimal-precision check (max 4 places), reasoning that a JSON payload deserialized into a `Double` loses the original string format, so precision was "the only signal that survives." The reviewer correctly pointed out this reasoning was incomplete — `1e-3` and `0.001` produce the *identical* `Double`, so a precision check can only catch scientific notation that *coincidentally* also needs excessive precision (like `1e-30`), not scientific notation in general. The proper fix (added afterwards) validates the raw JSON token before Jackson converts it, via a custom `@JsonDeserialize` deserializer on the `maxPoints`/`bonusPoints` fields.
 
 ---
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** [ls1intum/Artemis#13382](https://github.com/ls1intum/Artemis/pull/13382) — `` `Grading`: Reject scientific notation in points and bonus points fields ``, opened against `develop` (the project's actual default/main branch) from my fork's `fix-issue-12451` branch.
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:** Followed the project's own `.github/PULL_REQUEST_TEMPLATE.md` structure (not a generic one): Summary, Checklist (General/Server/Client, with inapplicable items like exam-mode-affecting-lifecycle removed per the template's own instruction), `Closes #12451` under Motivation and Context, a Description section explaining *why* before *what* (the root-cause reasoning from the Solution Approach section above), Steps for Testing, a Test Coverage table, and a before/after Screenshots section (native `validity.valid=true` with no error vs. the directive's `{scientificNotation: true}` with the red validation message shown). Full text is in this repo's contribution history / available on request — not duplicated here since it closely mirrors the Solution Approach and Testing Strategy sections above.
 
 **Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
+- **2026-08-02**: [CodeRabbit](https://github.com/ls1intum/Artemis/pull/13382) (automated review bot, assigned as part of the repo's standard PR checks) left 2 actionable comments:
+  1. `hasValidPointsPrecision` calls `BigDecimal.valueOf(points)`, which throws `NumberFormatException` for `NaN`/`Infinity` — these would 500 instead of returning a clean 400.
+  2. The precision check can't actually detect scientific notation in general — `BigDecimal.valueOf(1e-3)` and `BigDecimal.valueOf(0.001)` produce the identical value, so only extreme cases like `1e-30` (which also happen to need excessive decimal precision) were ever being caught. A value like `bonusPoints: 1e-3` sent directly via the API would still get through.
+  - **My response (same day)**: Both were valid, not false positives. Fixed #1 with `Double.isFinite()` guards before the precision check (commit [`c25539a6`](https://github.com/LinhNguyen2901/Artemis/commit/c25539a6bc)). Fixed #2 properly by adding a custom Jackson `JsonDeserializer` that validates the raw JSON token *before* it's converted to a `Double` — the only place the original format is still available — applied to `maxPoints`/`bonusPoints` on the entity and all 4 exercise-type update DTOs (commit [`d5f3ae03`](https://github.com/LinhNguyen2901/Artemis/commit/d5f3ae03fa)). Added a dedicated `StrictDecimalDeserializerTest` proving `1e-3` is now rejected (the exact case the reviewer flagged), plus ran a full existing integration test class (`TextExerciseIntegrationTest`, 107 tests) to confirm the new annotation doesn't break real request parsing.
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting review (CodeRabbit's automated round addressed; awaiting a human maintainer/reviewer look).
 
 ---
 
@@ -193,15 +225,22 @@ The local toolchain (Node, Docker, JDK) only came together gradually during this
 
 ### Technical Skills Gained
 
-[What you learned technically]
+- **Where format information actually lives in a validation pipeline.** The single biggest technical lesson of this whole contribution: once a string like `"1e-30"` or `"1e-3"` has been parsed into a number (a JS `Number`, a Java `Double`, doesn't matter), the *format it was written in* is gone forever — `1e-3` and `0.001` are the same bit pattern. Any validator that runs *after* parsing, no matter how clever, cannot ever fully recover that information. I learned this the hard way twice on the same contribution: once when I discovered Angular's `min`/`max` validators only see the parsed value (which is *why* the bug exists at all), and again when a reviewer showed my own server-side fix had the identical blind spot. The real fix in both cases had to move *earlier* — reading the raw DOM string via `ElementRef` on the client, and reading the raw JSON token via a custom Jackson `JsonDeserializer` on the server — before any parsing happened.
+- **Writing a custom Jackson deserializer and understanding where Java records let you annotate.** Never had to do this before; learned that `@JsonDeserialize(using = ...)` placed directly on a Java record component is picked up correctly by Jackson's constructor-based deserialization, without needing a mixin or a separate annotated class.
+- **Angular TestBed internals**: how `ControlValueAccessor.registerOnChange` gets wired up during the *first* change-detection cycle (not at component construction), and how a project can move from per-spec `setupTestBed()` calls to a single global `initTestEnvironment()` — and why mixing the two conventions throws `NG0400`.
+- **Real git workflow skills**: rebasing a feature branch onto a fast-moving upstream (150 commits) and manually resolving conflicts where both sides touched the same lines for different reasons, rather than just accepting "ours" or "theirs" wholesale.
 
 ### Challenges Overcome
 
-[What was hard and how you solved it]
+- **Local environment friction, repeatedly.** Node version mismatch, missing JDK 25, Docker Desktop not running, an ambient `JAVA_HOME` pointing at an unrelated old JDK — each one blocked a different verification step at a different point in the process. None were individually hard to fix, but there were a lot of them, and each one meant the difference between "I manually verified this logic in isolation" and "I ran the project's actual, authoritative test suite." I made a deliberate rule for myself: always try to get to the real test suite eventually, but don't let environment setup block *making progress* on the actual fix in the meantime.
+- **A genuine blind spot in my own work, caught by review.** It would have been easy to treat my server-side precision check as "done" once it passed the tests I wrote for it — after all, it did catch the issue's own literal example (`1e-30`). The uncomfortable but valuable part was recognizing that a reviewer's counter-example (`1e-3`) exposed a reasoning error in my *approach*, not just a missing test case, and that patching around it (e.g. lowering the precision threshold) wouldn't actually fix the underlying problem — only moving the check earlier in the pipeline would.
+- **Keeping a rebase's conflict resolution honest.** After resolving the merge conflicts in the File Upload and Text exercise templates, it would have been easy to just trust that "no conflict markers left" meant "correct." I went back and explicitly grepped for my own attribute (`noScientificNotation`) and directive import across all 4 templates/components after the rebase to confirm the fix actually survived the conflict resolution, rather than assuming it.
 
 ### What I'd Do Differently Next Time
 
-[Reflection on your process]
+- **Stress-test my own validation logic against near-miss cases before considering it done**, not just the exact example given in the bug report. `1e-30` was the literal issue example, but `1e-3`, `1e2`, `-1e-3`, etc. are all "the same bug" and I should have generated that test matrix myself before opening the PR, rather than after a reviewer pointed out the gap.
+- **Check for a project's "how do I run this" friction points *before* picking an issue**, or at least budget explicit time for it. A meaningful fraction of the total time on this contribution went into Node/JDK/Docker setup rather than the fix itself — worth remembering for scoping future contributions, especially to unfamiliar projects.
+- **Write the automated regression test using the real interaction mechanism from the start** (dispatching an actual DOM event) rather than a shortcut (assigning to the bound model property directly) — the shortcut worked for one test case and silently didn't for another, costing real debugging time to notice and fix.
 
 ---
 
